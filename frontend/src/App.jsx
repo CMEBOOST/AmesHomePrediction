@@ -12,8 +12,11 @@ import {
   Sparkles,
   Loader2,
   TrendingUp,
-  DollarSign
+  DollarSign,
+  Clock,
+  History
 } from 'lucide-react';
+import { useEffect } from 'react';
 
 function App() {
   const [formData, setFormData] = useState({
@@ -28,6 +31,15 @@ function App() {
   const [price, setPrice] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  
+  const [history, setHistory] = useState(() => {
+    const saved = localStorage.getItem('valuationHistory');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('valuationHistory', JSON.stringify(history));
+  }, [history]);
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -46,7 +58,17 @@ function App() {
     try {
       const response = await axios.post(`${API_URL}/predict`, formData);
       setTimeout(() => {
-        setPrice(response.data.predicted_price);
+        const predictedPrice = response.data.predicted_price;
+        setPrice(predictedPrice);
+        
+        const newRecord = {
+          id: Date.now(),
+          date: new Date().toLocaleString('th-TH', { hour12: false }),
+          price: predictedPrice,
+          details: `${formData.GrLivArea} ตร.ฟุต | ย่าน ${formData.Neighborhood} | สร้างปี ${formData.YearBuilt}`
+        };
+        setHistory(prev => [newRecord, ...prev].slice(0, 5)); // เก็บ 5 อันล่าสุด
+        
         setLoading(false);
       }, 600);
     } catch (err) {
@@ -233,6 +255,31 @@ function App() {
               <TrendingUp size={14} />
               อ้างอิงจากข้อมูลสถิติราคาบ้านใน Ames
             </div>
+          </div>
+        )}
+
+        {history.length > 0 && (
+          <div className="history-container">
+            <h3 className="history-title"><History size={16} /> ประวัติการประเมิน</h3>
+            <div className="history-list">
+              {history.map(item => (
+                <div key={item.id} className="history-item">
+                  <div className="history-main">
+                    <span className="history-price">${item.price.toLocaleString('en-US')}</span>
+                    <span className="history-date"><Clock size={12} style={{marginRight: '4px'}}/> {item.date}</span>
+                  </div>
+                  <div className="history-details">{item.details}</div>
+                </div>
+              ))}
+            </div>
+            {history.length > 0 && (
+              <button 
+                className="clear-history-btn"
+                onClick={() => setHistory([])}
+              >
+                ล้างประวัติ
+              </button>
+            )}
           </div>
         )}
       </div>

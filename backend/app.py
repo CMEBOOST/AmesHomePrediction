@@ -71,8 +71,27 @@ def predict_price(data: HomeData):
         raise HTTPException(status_code=400, detail=f"Preprocessing error: {str(e)}")
 
     # Predict
+    # test_preds has shape (1, 4) since we have 4 models
     test_preds = np.column_stack([pipe.predict(X_processed) for pipe in models.values()])
+    
+    # Calculate final weighted prediction
     final_log_pred = np.dot(test_preds, weights)[0]
     final_price = np.expm1(final_log_pred)
+    
+    # Calculate confidence based on Ensemble Agreement
+    # We convert log predictions to dollar prices for all 4 models
+    dollar_preds = np.expm1(test_preds[0])
+    # Calculate standard deviation among the 4 predictions
+    std_dev = np.std(dollar_preds)
+    
+    # Coefficient of Variation (CV) = Standard Deviation / Mean
+    cv = std_dev / final_price
+    
+    # Map CV to a confidence score (0 to 100)
+    # If standard deviation is 5% of the price (cv = 0.05), confidence is 95%
+    confidence_score = max(0, min(99.9, 100 * (1 - cv)))
 
-    return {"predicted_price": round(final_price, 2)}
+    return {
+        "predicted_price": round(final_price, 2),
+        "confidence_score": round(confidence_score, 1)
+    }

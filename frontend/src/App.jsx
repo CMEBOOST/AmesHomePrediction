@@ -29,6 +29,7 @@ function App() {
     Neighborhood: 'CollgCr'
   });
   const [price, setPrice] = useState(null);
+  const [confidence, setConfidence] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
@@ -59,7 +60,9 @@ function App() {
       const response = await axios.post(`${API_URL}/predict`, formData);
       setTimeout(() => {
         const predictedPrice = response.data.predicted_price;
+        const modelConfidence = response.data.confidence_score || 94.0;
         setPrice(predictedPrice);
+        setConfidence(modelConfidence);
         
         const newRecord = {
           id: Date.now(),
@@ -79,9 +82,10 @@ function App() {
   };
 
   return (
-    <div className="dashboard-container">
-      
-      {/* LEFT PANEL - Input Form */}
+    <div className="main-wrapper">
+      <div className="dashboard-container">
+        
+        {/* LEFT PANEL - Input Form */}
       <div className="form-panel">
         <div className="header">
           <span className="header-badge">ระบบประเมินด้วย AI</span>
@@ -234,6 +238,9 @@ function App() {
             <div className="result-subtitle">ราคาประเมินตามราคาตลาด</div>
             <div className="price-value">
               ${price.toLocaleString('en-US')}
+              <div className="price-thb">
+                ≈ ฿{(price * 34.5).toLocaleString('th-TH', { maximumFractionDigits: 0 })}
+              </div>
             </div>
             
             <div className="insight-box">
@@ -243,7 +250,9 @@ function App() {
               </div>
               <div className="insight-row">
                 <span className="insight-label">ความมั่นใจของโมเดล</span>
-                <span className="insight-val" style={{color: 'var(--secondary)'}}>สูง (94%)</span>
+                <span className="insight-val" style={{color: confidence > 90 ? 'var(--secondary)' : '#f59e0b'}}>
+                  {confidence > 95 ? 'สูงมาก' : confidence > 90 ? 'สูง' : 'ปานกลาง'} ({confidence}%)
+                </span>
               </div>
               <div className="insight-row">
                 <span className="insight-label">ย่านที่ตั้ง</span>
@@ -257,32 +266,35 @@ function App() {
             </div>
           </div>
         )}
+      </div>
 
-        {history.length > 0 && (
-          <div className="history-container">
-            <h3 className="history-title"><History size={16} /> ประวัติการประเมิน</h3>
-            <div className="history-list">
-              {history.map(item => (
-                <div key={item.id} className="history-item">
-                  <div className="history-main">
-                    <span className="history-price">${item.price.toLocaleString('en-US')}</span>
-                    <span className="history-date"><Clock size={12} style={{marginRight: '4px'}}/> {item.date}</span>
-                  </div>
-                  <div className="history-details">{item.details}</div>
-                </div>
-              ))}
+    </div>
+
+    {/* SIDEBAR - History */}
+    {history.length > 0 && (
+      <div className="history-sidebar">
+        <h3 className="history-title"><History size={16} /> ประวัติการประเมิน</h3>
+        <div className="history-list">
+          {history.map(item => (
+            <div key={item.id} className="history-item">
+              <div className="history-main">
+                <span className="history-price">${item.price.toLocaleString('en-US')}</span>
+                <span className="history-date"><Clock size={12} style={{marginRight: '4px'}}/> {item.date}</span>
+              </div>
+              <div className="history-details">{item.details}</div>
             </div>
-            {history.length > 0 && (
-              <button 
-                className="clear-history-btn"
-                onClick={() => setHistory([])}
-              >
-                ล้างประวัติ
-              </button>
-            )}
-          </div>
+          ))}
+        </div>
+        {history.length > 0 && (
+          <button 
+            className="clear-history-btn"
+            onClick={() => setHistory([])}
+          >
+            ล้างประวัติ
+          </button>
         )}
       </div>
+    )}
 
     </div>
   );

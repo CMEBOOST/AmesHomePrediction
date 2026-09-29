@@ -29,6 +29,22 @@
 
 > **Note:** ตัวแปรเป้าหมาย (ราคาบ้าน หรือ `SalePrice`) ถูกนำมาแปลงด้วย Log-Transformation (`log1p`) ก่อนนำไปให้โมเดลเรียนรู้ และถูกตัดค่า Outliers ที่ผิดปกติออกไป เพื่อให้ตัวโมเดลทำงานได้อย่างมีประสิทธิภาพและแม่นยำที่สุด
 
+## 🧮 โมเดลที่ใช้ในเว็บ (ฟอร์ม 15 ช่อง)
+
+โมเดลข้างต้นเรียนรู้จาก 79 ตัวแปร ซึ่งยาวเกินไปสำหรับให้ผู้ใช้กรอกเอง เว็บจึงใช้โมเดลที่เทรนด้วย **15 ฟีเจอร์ที่ผู้ใช้กรอกจริง** (โครงสร้างเดิม: Ridge + Lasso + Gradient Boosting + LightGBM ถ่วงน้ำหนักด้วย SLSQP บน out-of-fold predictions)
+
+| กลุ่ม | ฟีเจอร์ |
+|---|---|
+| ขนาด | `GrLivArea`, `FirstFlrSF` (1stFlrSF), `LotArea`, `TotalBsmtSF`, `BsmtFinSF1` |
+| คุณภาพและอายุ | `OverallQual`, `OverallCond`, `YearBuilt`, `YearRemodAdd` |
+| สิ่งอำนวยความสะดวกและทำเล | `GarageCars`, `FullBath`, `Fireplaces`, `CentralAir`, `MSZoning`, `Neighborhood` |
+
+- เลือกจากความสำคัญของตัวแปร (Gradient Boosting feature importance) บวก `Neighborhood` ที่ผู้ใช้ตอบง่าย
+- ผล 5-Fold out-of-fold: RMSLE ≈ 0.116, MAE ≈ $14,100, R² ≈ 0.928 (โมเดลเต็ม 79 ตัวแปรในโน้ตบุ๊ก: RMSLE ≈ 0.110)
+- API ตรวจช่วงค่าที่รับได้ (ตอบ HTTP 422 ถ้าเป็นไปไม่ได้ เช่น พื้นที่ 30,003 ตร.ฟุต) และส่ง `warnings` เมื่อค่าอยู่นอกช่วงข้อมูลที่โมเดลเคยเห็น
+- เทรนใหม่: `cd backend && python ml_pipeline.py path/to/train.csv` (ได้ไฟล์ `model_artifacts.joblib`)
+- ไฟล์ `.joblib` ผูกกับเวอร์ชันไลบรารี จึงตรึงเวอร์ชันไว้ใน `backend/requirements.txt` (scikit-learn, lightgbm, numpy, pandas, scipy, joblib) และใช้ Python 3.11 บน Render
+
 ## 🚀 คำแนะนำการใช้งานและการนำไปติดตั้ง (Deployment Instructions)
 
 ### 1. การ Deploy Backend (บน Render)

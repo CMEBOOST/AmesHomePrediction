@@ -12,24 +12,47 @@ import {
   Sparkles,
   Loader2,
   TrendingUp,
-  DollarSign,
   Clock,
-  History
+  History,
+  LayoutGrid,
+  Maximize,
+  ClipboardCheck,
+  Wrench,
+  Flame,
+  Snowflake,
+  Building2,
+  TriangleAlert
 } from 'lucide-react';
 import { useEffect } from 'react';
 
+// Fields the model was trained on (keep in sync with NUMERIC_FEATURES in backend/ml_pipeline.py).
+const NUMERIC_FIELDS = [
+  { name: 'GrLivArea',    label: 'พื้นที่ใช้สอยเหนือพื้นดิน (ตร.ฟุต)', icon: Ruler,          min: 300,  max: 6000,   default: 1464 },
+  { name: 'FirstFlrSF',   label: 'พื้นที่ชั้น 1 (ตร.ฟุต)',             icon: LayoutGrid,     min: 300,  max: 6000,   default: 1086 },
+  { name: 'LotArea',      label: 'ขนาดที่ดิน (ตร.ฟุต)',                icon: Maximize,       min: 1000, max: 250000, default: 9475 },
+  { name: 'OverallQual',  label: 'คุณภาพวัสดุและการตกแต่ง (1-10)',     icon: Star,           min: 1,    max: 10,     default: 6 },
+  { name: 'OverallCond',  label: 'สภาพบ้านโดยรวม (1-10)',              icon: ClipboardCheck, min: 1,    max: 10,     default: 5 },
+  { name: 'YearBuilt',    label: 'ปีที่สร้าง',                         icon: Calendar,       min: 1800, max: 2030,   default: 1973 },
+  { name: 'YearRemodAdd', label: 'ปีที่รีโนเวตล่าสุด (ไม่เคย = ปีที่สร้าง)', icon: Wrench,    min: 1800, max: 2030,   default: 1994 },
+  { name: 'TotalBsmtSF',  label: 'พื้นที่ห้องใต้ดินรวม (ตร.ฟุต)',      icon: Layers,         min: 0,    max: 6000,   default: 991 },
+  { name: 'BsmtFinSF1',   label: 'พื้นที่ห้องใต้ดินที่ตกแต่งแล้ว (ตร.ฟุต)', icon: Layers,    min: 0,    max: 5000,   default: 382 },
+  { name: 'GarageCars',   label: 'ความจุโรงรถ (คัน)',                  icon: Car,            min: 0,    max: 5,      default: 2 },
+  { name: 'FullBath',     label: 'จำนวนห้องน้ำเต็ม',                   icon: Bath,           min: 0,    max: 4,      default: 2 },
+  { name: 'Fireplaces',   label: 'จำนวนเตาผิง',                        icon: Flame,          min: 0,    max: 4,      default: 1 },
+];
+
+const CATEGORICAL_NAMES = ['Neighborhood', 'MSZoning', 'CentralAir'];
+
 function App() {
   const [formData, setFormData] = useState({
-    GrLivArea: 1500,
-    OverallQual: 6,
-    YearBuilt: 2000,
-    TotalBsmtSF: 1000,
-    GarageCars: 2,
-    FullBath: 2,
-    Neighborhood: 'CollgCr'
+    ...Object.fromEntries(NUMERIC_FIELDS.map(f => [f.name, f.default])),
+    CentralAir: 'Y',
+    MSZoning: 'RL',
+    Neighborhood: 'NAmes'
   });
   const [price, setPrice] = useState(null);
   const [confidence, setConfidence] = useState(null);
+  const [warnings, setWarnings] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
@@ -48,7 +71,7 @@ function App() {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: ['Neighborhood'].includes(name) ? value : Number(value)
+      [name]: CATEGORICAL_NAMES.includes(name) ? value : Number(value)
     }));
   };
 
@@ -63,12 +86,13 @@ function App() {
         const modelConfidence = response.data.confidence_score || 94.0;
         setPrice(predictedPrice);
         setConfidence(modelConfidence);
+        setWarnings(response.data.warnings || []);
         
         const newRecord = {
           id: Date.now(),
           date: new Date().toLocaleString('th-TH', { hour12: false }),
           price: predictedPrice,
-          details: `${formData.GrLivArea} ตร.ฟุต | ย่าน ${formData.Neighborhood} | สร้างปี ${formData.YearBuilt}`
+          details: `${formData.GrLivArea} ตร.ฟุต | คุณภาพ ${formData.OverallQual} | ย่าน ${formData.Neighborhood} | สร้างปี ${formData.YearBuilt}`
         };
         setHistory(prev => [newRecord, ...prev].slice(0, 5)); // เก็บ 5 อันล่าสุด
         
@@ -76,7 +100,16 @@ function App() {
       }, 600);
     } catch (err) {
       console.error(err);
-      setError('เกิดข้อผิดพลาดในการประเมินราคา กรุณาลองใหม่อีกครั้ง');
+      const detail = err.response?.data?.detail;
+      if (err.response?.status === 422 && Array.isArray(detail) && detail.length > 0) {
+        // Validation error from the API (e.g. impossible value): show which field and why
+        const first = detail[0];
+        const field = first.loc?.[first.loc.length - 1];
+        const msg = String(first.msg).replace('Value error, ', '');
+        setError(field === 'body' ? `ข้อมูลไม่ถูกต้อง: ${msg}` : `ข้อมูลไม่ถูกต้อง (${field}): ${msg}`);
+      } else {
+        setError('เกิดข้อผิดพลาดในการประเมินราคา กรุณาลองใหม่อีกครั้ง');
+      }
       setLoading(false);
     }
   };
@@ -95,80 +128,38 @@ function App() {
 
         <form onSubmit={handleSubmit} className="form-grid">
           
+          {NUMERIC_FIELDS.map(({ name, label, icon: Icon, min, max }) => (
+            <div className="input-wrapper" key={name}>
+              <label><Icon size={16} /> {label}</label>
+              <input 
+                type="number" 
+                name={name} 
+                min={min} max={max}
+                className="styled-input"
+                value={formData[name]} 
+                onChange={handleChange} 
+                required 
+              />
+            </div>
+          ))}
+
           <div className="input-wrapper">
-            <label><Ruler size={16} /> พื้นที่ใช้สอย (ตร.ฟุต)</label>
-            <input 
-              type="number" 
-              name="GrLivArea" 
-              className="styled-input"
-              value={formData.GrLivArea} 
-              onChange={handleChange} 
-              required 
-            />
+            <label><Snowflake size={16} /> ระบบแอร์ส่วนกลาง</label>
+            <select name="CentralAir" className="styled-input" value={formData.CentralAir} onChange={handleChange}>
+              <option value="Y">มี</option>
+              <option value="N">ไม่มี</option>
+            </select>
           </div>
 
           <div className="input-wrapper">
-            <label><Star size={16} /> คุณภาพโดยรวม (1-10)</label>
-            <input 
-              type="number" 
-              name="OverallQual" 
-              min="1" max="10" 
-              className="styled-input"
-              value={formData.OverallQual} 
-              onChange={handleChange} 
-              required 
-            />
-          </div>
-
-          <div className="input-wrapper">
-            <label><Calendar size={16} /> ปีที่สร้าง</label>
-            <input 
-              type="number" 
-              name="YearBuilt" 
-              min="1800" max="2025"
-              className="styled-input"
-              value={formData.YearBuilt} 
-              onChange={handleChange} 
-              required 
-            />
-          </div>
-
-          <div className="input-wrapper">
-            <label><Layers size={16} /> พื้นที่ห้องใต้ดิน (ตร.ฟุต)</label>
-            <input 
-              type="number" 
-              name="TotalBsmtSF" 
-              className="styled-input"
-              value={formData.TotalBsmtSF} 
-              onChange={handleChange} 
-              required 
-            />
-          </div>
-
-          <div className="input-wrapper">
-            <label><Car size={16} /> ความจุกระจอดรถ (คัน)</label>
-            <input 
-              type="number" 
-              name="GarageCars" 
-              min="0" max="5"
-              className="styled-input"
-              value={formData.GarageCars} 
-              onChange={handleChange} 
-              required 
-            />
-          </div>
-
-          <div className="input-wrapper">
-            <label><Bath size={16} /> จำนวนห้องน้ำเต็ม</label>
-            <input 
-              type="number" 
-              name="FullBath" 
-              min="0" max="5"
-              className="styled-input"
-              value={formData.FullBath} 
-              onChange={handleChange} 
-              required 
-            />
+            <label><Building2 size={16} /> เขตที่ดิน (Zoning)</label>
+            <select name="MSZoning" className="styled-input" value={formData.MSZoning} onChange={handleChange}>
+              <option value="RL">ต่ำ (RL)</option>
+              <option value="RM">ปานกลาง (RM)</option>
+              <option value="RH">สูง (RH)</option>
+              <option value="FV">Floating Village</option>
+              <option value="C (all)">พาณิชย์ (C)</option>
+            </select>
           </div>
 
           <div className="input-wrapper full-width">
@@ -260,6 +251,13 @@ function App() {
               </div>
             </div>
             
+            {warnings.length > 0 && (
+              <div style={{marginTop: '1rem', color: '#f59e0b', fontSize: '0.8rem', display: 'flex', gap: '0.5rem', textAlign: 'left'}}>
+                <TriangleAlert size={16} style={{flexShrink: 0}} />
+                <span>ค่าที่กรอกอยู่นอกช่วงข้อมูลที่โมเดลเคยเรียนรู้ ราคาอาจคลาดเคลื่อน ({warnings.join('; ')})</span>
+              </div>
+            )}
+
             <div style={{marginTop: '1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'}}>
               <TrendingUp size={14} />
               อ้างอิงจากข้อมูลสถิติราคาบ้านใน Ames
